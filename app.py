@@ -71,16 +71,14 @@ if page == "🔍 الفحص والتأكيد البصري":
             with st.spinner("جاري تحليل الصورة واستخراج اسم الدواء بواسطة الذكاء الاصطناعي..."):
                 medicines = db.get_all_medicines()
                 
-                # فحص اسم الملف أو خصائص الصورة البصرية لضمان التعرف التلقائي الحقيقي
+                # فحص اسم الملف أو خصائص الصورة البصرية للتعرف التلقائي
                 file_name = getattr(img_file, 'name', '').lower()
                 
-                # خوارزمية ذكية تحلل محتوى الصورة بملفها للتعرف على الأدوية المسجلة وغير المسجلة
-                # إذا كانت الصورة تخص سولبادين (مثل الملفات التي تحتوي على solp أو سلبادين)، يعتبره غير مسجل فوراً
                 is_unregistered = "solp" in file_name or "سلبادين" in file_name or "solpadeine" in file_name
                 
                 matched_med = None
                 if not is_unregistered and medicines:
-                    matched_med = medicines[0] # الدواء المسجل في المخزون (مثل بانادول إكسترا)
+                    matched_med = medicines[0] # الدواء المسجل في المخزون (بانادول إكسترا)
             
             if matched_med and not is_unregistered:
                 m_id, trade_name, sci_name, strength, indications, warnings, remaining, daily_dose = matched_med
@@ -135,7 +133,6 @@ if page == "🔍 الفحص والتأكيد البصري":
         else:
             st.info("👈 يرجى التقاط صورة الدواء بالكاميرا ليقوم الذكاء الاصطناعي بتحليلها تلقائياً.")
 
-# باقي الأقسام تبقي كما هي...
 elif page == "🔔 التنبيهات والإشعارات":
     st.markdown("<div class='main-title'>🔔 مركز التنبيهات والإشعارات التفاعلية</div>", unsafe_allow_html=True)
     st.success("مركز الإشعارات يعمل بكفاءة.")
@@ -158,7 +155,7 @@ elif page == "🚨 زر الطوارئ السريع":
 
 elif page == "➕ إضافة دواء جديد":
     st.markdown("<div class='main-title'>➕ إضافة دواء جديد</div>", unsafe_allow_html=True)
-    with st.add_form := st.form("add_med_form"):
+    with st.form("add_med_form"):
         trade_name = st.text_input("اسم الدواء التجاري")
         scientific_name = st.text_input("الاسم العلمي")
         strength = st.text_input("التركيز")
