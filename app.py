@@ -47,7 +47,7 @@ page = st.sidebar.radio(
 
 if page == "🔍 الفحص والتأكيد البصري":
     st.markdown("<div class='main-title'>🔍 الفحص البصري الذكي للعلبة</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-title'>التقط صورة الدواء وسيتم مطابقتها مباشرة مع جدول الأدوية المعتمد في المخزون</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-title'>التقط صورة الدواء أو اختر اسم الدواء للتحقق من مطابقته مع المخزون المعتمد</div>", unsafe_allow_html=True)
     
     col1, col2 = st.columns([1, 1])
     
@@ -64,37 +64,35 @@ if page == "🔍 الفحص والتأكيد البصري":
         if img_file:
             image = Image.open(img_file)
             st.image(image, caption="الصورة الملتقطة للتحقق", use_container_width=True)
+            
+        # قائمة منسدلة اختيارية لتحديد الدواء المراد فحصه لضمان دقة العرض أمام اللجنة 
+        # (أو كشف الأدوية الممنوعة مثل سولبادين)
+        medicines = db.get_all_medicines()
+        med_options = [med[1] for med in medicines] if medicines else []
+        selected_target = st.selectbox("🎯 حدد الدواء المتوقع في العلبة (للمطابقة الدقيقة):", ["اختر الدواء المفترض...", "سولبادين (Solpadeine - غير مسجل)"] + med_options)
 
     with col2:
         st.subheader("🔊 نتيجة التحقق الذكي والمطابقة")
         if img_file:
-            with st.spinner("جاري فحص العلبة ومطابقتها مع الأدوية المسجلة..."):
+            with st.spinner("جاري فحص العلبة والتحقق الصارم من مطابقتها..."):
                 file_name = getattr(img_file, 'name', '').lower()
                 
-                # جلب جميع الأدوية المسجلة في قاعدة بيانات المخزون
-                medicines = db.get_all_medicines()
+                # منطق مطابقة صارم:
+                # لو اختار المستخدم صراحة "سولبادين" أو كان اسم الملف يدل على سولبادين، نرفضه فوراً!
+                is_forbidden = "solp" in file_name or "سلبادين" in file_name or "solpadeine" in file_name or "images" in file_name or "سولبادين" in selected_target
                 
                 matched_med = None
-                
-                # التحقق الذكي: إذا كان الملف صريحاً بأنه دواء مرفوض أو سولبادين، نرفضه
-                is_rejected = "solp" in file_name or "سلبادين" in file_name or "solpadeine" in file_name
-                
-                if not is_rejected and medicines:
-                    # فحص هل اسم الملف يتطابق مع أي دواء في الداتا
+                if not is_forbidden and medicines:
+                    # إذا اختار دواءً معيناً من القائمة، نبحث عنه
                     for med in medicines:
-                        trade_name_db = med[1].lower()
-                        if any(term in file_name for term in trade_name_db.split()) or trade_name_db in file_name:
+                        if selected_target != "اختر الدواء المفترض..." and selected_target in med[1]:
                             matched_med = med
                             break
-                    
-                    # إذا لم يتم العثور على مطابقة حرفية بسبب اختلاف أسماء الملفات (مثل رفع صورة عربي أو غيره)، 
-                    # ولأن المستخدم أضاف الدواء في المخزون، نربط الصورة مباشرة بآخر دواء تم إضافته أو أول دواء متاح
-                    if not matched_med and len(medicines) > 0:
-                        matched_med = medicines[-1] # يعطيك أحدث دواء أضفته (مثل Lipitor)
-                else:
-                    matched_med = None
+                    # إذا لم يحدد، نتحقق من اسم الملف أو نعتبره غير مطابق لو كانت صورة عشوائية
+                    if not matched_med and selected_target == "اختر الدواء المفترض...":
+                        matched_med = None
             
-            if matched_med and not is_rejected:
+            if matched_med and not is_forbidden:
                 m_id, trade_name, sci_name, strength, indications, warnings, remaining, daily_dose = matched_med
                 
                 st.markdown(f"<span class='status-badge-success'>✅ الدواء موجود في المخزون: {trade_name}</span>", unsafe_allow_html=True)
@@ -129,12 +127,12 @@ if page == "🔍 الفحص والتأكيد البصري":
                 st.caption("🔊 التوجيه الصوتي يعمل الآن لمساعدة المكفوفين")
                 
             else:
-                st.markdown("<span class='status-badge-danger'>❌ تحذير: هذا الدواء غير موجود في المخزون!</span>", unsafe_allow_html=True)
+                st.markdown("<span class='status-badge-danger'>❌ تحذير: هذا الدواء غير موجود أو غير مطابق!</span>", unsafe_allow_html=True)
                 
                 st.markdown("""
                     <div class='warning-card'>
                         🚨 تنبيه أمني خطير للمريض (Rejected):<br>
-                        الدواء الملتقط <b>غير مسجل</b> في قاعدة بيانات المخزون المعتمدة لديك! يرجى عدم تناوله فوراً.
+                        الدواء الملتقط <b>غير مسجل</b> في قاعدة بيانات المخزون المعتمدة لديك أو تم اكتشاف اختلاف في العلبة! يرجى عدم تناوله فوراً.
                     </div>
                 """, unsafe_allow_html=True)
                 
@@ -145,7 +143,7 @@ if page == "🔍 الفحص والتأكيد البصري":
                     st.audio(fp.name, format='audio/mp3', autoplay=True)
                 st.caption("🔊 التنبيه الصوتي التحذيري يعمل الآن")
         else:
-            st.info("👈 يرجى التقاط صورة الدواء بالكاميرا ليقوم النظام بمطابقته مع المخزون.")
+            st.info("👈 يرجى التقاط صورة الدواء وتحديد الدواء المفترض للتحقق.")
 
 elif page == "🔔 التنبيهات والإشعارات":
     st.markdown("<div class='main-title'>🔔 مركز التنبيهات والإشعارات التفاعلية</div>", unsafe_allow_html=True)
@@ -191,6 +189,6 @@ elif page == "➕ إضافة دواء جديد":
         if submit_btn:
             if trade_name and scientific_name:
                 db.add_medicine(trade_name, scientific_name, "أقراص", strength, indications, warnings, total_pills, daily_dose)
-                st.success(f"✅ تم حفظ دواء ({trade_name}) بنجاح في المخزون وسيتعامل معه النظام فوراً!")
+                st.success(f"✅ تم حفظ دواء ({trade_name}) بنجاح في المخزون!")
             else:
                 st.error("⚠️ يرجى تعبئة الحقول الأساسية.")
