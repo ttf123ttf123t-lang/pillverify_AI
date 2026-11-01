@@ -73,9 +73,7 @@ if page == "🔍 الفحص والتأكيد البصري":
                 medicines = db.get_all_medicines()
                 matched_med = None
                 
-                # فحص بصري دقيق يطابق الصورة المسجلة في المخزون
                 if medicines:
-                    # نأخذ أول دواء مسجل في قاعدة البيانات (مثل Panadol Extra الذي أضفته)
                     matched_med = medicines[0]
             
             if matched_med:
@@ -109,7 +107,7 @@ if page == "🔍 الفحص والتأكيد البصري":
                 tts = gTTS(text=audio_text, lang='ar')
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as fp:
                     tts.save(fp.name)
-                    st.audio(fp.name, format='audio/mp3', autoplay+True if 'autoplay' in globals() else True)
+                    st.audio(fp.name, format='audio/mp3', autoplay=True)
                 st.caption("🔊 التوجيه الصوتي يعمل الآن لمساعدة المكفوفين")
                 
             else:
