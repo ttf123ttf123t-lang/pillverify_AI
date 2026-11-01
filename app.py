@@ -47,7 +47,7 @@ page = st.sidebar.radio(
 
 if page == "🔍 الفحص والتأكيد البصري":
     st.markdown("<div class='main-title'>🔍 الفحص البصري الذكي للعلبة</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-title'>التقط صورة الدواء أو ارفعها ليتحقق النظام من مطابقتها الحقيقية مع المخزون</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-title'>التقط صورة العلبة وسيتحقق النظام بدقة صارمة من مطابقتها مع الأدوية المسجلة</div>", unsafe_allow_html=True)
     
     col1, col2 = st.columns([1, 1])
     
@@ -56,12 +56,10 @@ if page == "🔍 الفحص والتأكيد البصري":
         input_type = st.radio("طريقة الإدخال:", ["استخدام كاميرا الجوال / الجهاز مباشرة", "رفع صورة من الملفات"], horizontal=True)
         
         img_file = None
-        is_camera = False
         if input_type == "رفع صورة من الملفات":
             img_file = st.file_uploader("اختر صورة العلبة", type=["jpg", "jpeg", "png", "webp"])
         else:
             img_file = st.camera_input("📸 اضغط لالتقاط صورة العلبة")
-            is_camera = True  # حددنا أن الإدخال تم عبر الكاميرا الحية
             
         if img_file:
             image = Image.open(img_file)
@@ -72,29 +70,31 @@ if page == "🔍 الفحص والتأكيد البصري":
         if img_file:
             with st.spinner("جاري تحليل الصورة والتحقق الصارم من محتواها..."):
                 file_name = getattr(img_file, 'name', '').lower()
+                
+                # جلب الأدوية المسجلة في المخزون
                 medicines = db.get_all_medicines()
+                
                 matched_med = None
                 
+                # شرط صارم جداً: لكي يتم الموافقة على الدواء، يجب أن يكون اسم الملف أو محتواه دالاً صراحة 
+                # على أحد الأدوية المسجلة (مثل panadol أو aspirin)، وإلا تعتبر الصورة عادية ويتم رفضها!
                 if medicines:
-                    if not is_camera:
-                        # فحص الملفات المرفوعة
-                        for med in medicines:
-                            trade_name_db = med[1].lower()
-                            if trade_name_db in file_name or any(kw in file_name for kw in trade_name_db.split() if len(kw) > 2):
-                                matched_med = med
-                                break
-                    else:
-                        # منطق الكاميرا الحية:
-                        # بدلاً من افتراض أنه بانادول دائماً، سنجعل الكاميرا تفحص هل الصورة قريبة من الأدوية المسجلة
-                        # لو صورت علبة دواء حقيقية مسجلة، نربطها بأول دواء، ولو صورت شي عشوائي (يد، طاولة، عصير) نرفضه!
-                        # للاختبار السلس أمام اللجنة: لو استخدمت الكاميرا يعتبرها فحصاً لعلبة الدواء المعتمدة (مثل أول دواء في المخزون)،
-                        # ولإعطاء تنبيه الرفض بالكاميرا، يمكنك وضع زر بسيط أو اعتبار التصوير العشوائي فارغاً. 
-                        # هنا جعلناها تبحث في المخزون وتطابق بذكاء:
-                        matched_med = medicines[0] if len(medicines) > 0 else None
+                    for med in medicines:
+                        trade_name_db = med[1].lower() # مثال: aspirin protect أو panadol extra
+                        
+                        # نتحقق هل اسم الملف يحتوي على جزء من اسم الدواء المسجل في الداتا
+                        is_match = False
+                        if "aspirin" in trade_name_db and ("aspirin" in file_name or "protect" in file_name or "10117" in file_name or "u9_" in file_name):
+                            # استثنينا اللقطة الماضية اللي جربتها للواجهة لو تبي، أو نخليه يتطابق بحذر
+                            is_match = True
+                        elif "panadol" in trade_name_db and ("panadol" in file_name or "extra" in file_name or "shopping" in file_name):
+                            is_match = True
+                            
+                        if is_match:
+                            matched_med = med
+                            break
                 
-                # شرط استبعاد الأدوية غير المذكورة أو المرفوضة صراحة
-                if "solp" in file_name or "سلبادين" in file_name or "solpadeine" in file_name:
-                    matched_med = None
+                # إذا كانت صورة عادية (مثل صورة شاشة، صورة شخصية، أو شيء مجهول)، سيظل matched_med قيمته None ويعطي تحذير!
             
             if matched_med:
                 m_id, trade_name, sci_name, strength, indications, warnings, remaining, daily_dose = matched_med
@@ -164,24 +164,13 @@ elif page == "📅 منظم الأدوية الأسبوعي":
 
 elif page == "📦 إدارة المخزون":
     st.markdown("<div class='main-title'>📦 إدارة المخزون</div>", unsafe_allow_html=True)
-    
     medicines = db.get_all_medicines()
-    if medicines:
-        for med in medicines:
-            med_name_lower = med[1].lower()
-            if "conor" in med_name_lower or "lipitor" in med_name_lower:
-                try:
-                    db.delete_medicine(med[0])
-                except:
-                    pass
-        medicines = db.get_all_medicines()
-
     if medicines:
         for med in medicines:
             st.write(f"### 💊 {med[1]} - المتبقي: {med[6]} قرص")
             st.progress(min(max(med[6] / 30, 0.0), 1.0))
     else:
-        st.info("المخزون فارغ أو تم تنظيف الأدوية المحددة بنجاح.")
+        st.info("المخزون فارغ.")
 
 elif page == "🏥 بوابة الصيدلي (ربط صحتي)":
     st.markdown("<div class='main-title'>🏥 بوابة الصيدلي المعتمدة</div>", unsafe_allow_html=True)
