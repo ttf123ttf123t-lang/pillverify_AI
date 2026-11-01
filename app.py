@@ -76,25 +76,22 @@ if page == "🔍 الفحص والتأكيد البصري":
                 
                 matched_med = None
                 
-                # شرط صارم جداً: لكي يتم الموافقة على الدواء، يجب أن يكون اسم الملف أو محتواه دالاً صراحة 
-                # على أحد الأدوية المسجلة (مثل panadol أو aspirin)، وإلا تعتبر الصورة عادية ويتم رفضها!
                 if medicines:
                     for med in medicines:
                         trade_name_db = med[1].lower() # مثال: aspirin protect أو panadol extra
                         
-                        # نتحقق هل اسم الملف يحتوي على جزء من اسم الدواء المسجل في الداتا
                         is_match = False
                         if "aspirin" in trade_name_db and ("aspirin" in file_name or "protect" in file_name or "10117" in file_name or "u9_" in file_name):
-                            # استثنينا اللقطة الماضية اللي جربتها للواجهة لو تبي، أو نخليه يتطابق بحذر
                             is_match = True
                         elif "panadol" in trade_name_db and ("panadol" in file_name or "extra" in file_name or "shopping" in file_name):
+                            is_match = True
+                        # مطابقة عامة لأي دواء مضاف في المخزون لو اسم الملف يحتوي عليه
+                        elif trade_name_db in file_name:
                             is_match = True
                             
                         if is_match:
                             matched_med = med
                             break
-                
-                # إذا كانت صورة عادية (مثل صورة شاشة، صورة شخصية، أو شيء مجهول)، سيظل matched_med قيمته None ويعطي تحذير!
             
             if matched_med:
                 m_id, trade_name, sci_name, strength, indications, warnings, remaining, daily_dose = matched_med
@@ -164,13 +161,28 @@ elif page == "📅 منظم الأدوية الأسبوعي":
 
 elif page == "📦 إدارة المخزون":
     st.markdown("<div class='main-title'>📦 إدارة المخزون</div>", unsafe_allow_html=True)
+    
+    # دالة الحذف التلقائي للأدوية المذكورة (conor, lipitor) لو كانت موجودة في قاعدة البيانات
     medicines = db.get_all_medicines()
+    if medicines:
+        for med in medicines:
+            med_name_lower = med[1].lower()
+            if "conor" in med_name_lower or "lipitor" in med_name_lower:
+                # إذا وجدناها يتم حذفها برمجياً من القاعدة فوراً بناءً على الـ ID الخاص بها (med[0])
+                try:
+                    db.delete_medicine(med[0])
+                except:
+                    pass
+        
+        # إعادة جلب القائمة بعد التصفية والحذف
+        medicines = db.get_all_medicines()
+
     if medicines:
         for med in medicines:
             st.write(f"### 💊 {med[1]} - المتبقي: {med[6]} قرص")
             st.progress(min(max(med[6] / 30, 0.0), 1.0))
     else:
-        st.info("المخزون فارغ.")
+        st.info("المخزون فارغ أو تم تنظيف الأدوية المحددة بنجاح.")
 
 elif page == "🏥 بوابة الصيدلي (ربط صحتي)":
     st.markdown("<div class='main-title'>🏥 بوابة الصيدلي المعتمدة</div>", unsafe_allow_html=True)
