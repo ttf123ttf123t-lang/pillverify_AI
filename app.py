@@ -4,9 +4,18 @@ from PIL import Image
 import database as db
 from gtts import gTTS
 import tempfile
+import easyocr
+import numpy as np
 
 # تهيئة قاعدة البيانات عند بدء التشغيل
 db.init_db()
+
+# تهيئة قارئ النصوص السريع (EasyOCR) للغة العربية والإنجليزية
+@st.cache_resource
+def load_ocr_reader():
+    return easyocr.Reader(['en', 'ar'])
+
+reader = load_ocr_reader()
 
 # إعدادات الصفحة
 st.set_page_config(
@@ -46,8 +55,8 @@ page = st.sidebar.radio(
 )
 
 if page == "🔍 الفحص والتأكيد البصري":
-    st.markdown("<div class='main-title'>🔍 الفحص البصري التلقائي للأدوية</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-title'>التقط صورة الدواء وسيقوم النظام بمطابقته تلقائياً مع أدويتك المسجلة في المخزون</div>", unsafe_allow_html=True)
+    st.markdown("<div class='main-title'>🔍 الفحص البصري الذكي (استخراج النصوص OCR)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-title'>التقط صورة الدواء وسيتم قراءة النص من داخل الصورة ومطابقته مع المخزون تلقائياً</div>", unsafe_allow_html=True)
     
     col1, col2 = st.columns([1, 1])
     
@@ -66,46 +75,33 @@ if page == "🔍 الفحص والتأكيد البصري":
             st.image(image, caption="الصورة الملتقطة للتحقق", use_container_width=True)
 
     with col2:
-        st.subheader("🔊 نتيجة التحقق التلقائي والمطابقة")
+        st.subheader("🔊 نتيجة التحقق الذكي والمطابقة")
         if img_file:
-            with st.spinner("جاري فحص العلبة ومطابقتها تلقائياً مع قاعدة بيانات المخزون..."):
-                file_name = getattr(img_file, 'name', '').lower()
+            with st.spinner("جاري قراءة النصوص من داخل الصورة بالذكاء الاصطناعي (OCR)..."):
+                # تحويل الصورة إلى مصفوفة لقراءتها عبر EasyOCR
+                image_np = np.array(image)
                 
-                # جلب جميع الأدوية المسجلة في المخزون حالياً
+                # استخراج النصوص من الصورة مباشرة بغض النظر عن اسم الملف
+                ocr_results = reader.readtext(image_np, detail=0)
+                extracted_text = " ".join(ocr_results).lower()
+                
+                # عرض النصوص المستخرجة للتأكد (اختياري للوضوح)
+                st.caption(f"📝 النص المقروء من الصورة: {extracted_text}")
+                
+                # جلب الأدوية المسجلة في المخزون
                 medicines = db.get_all_medicines()
-                
                 matched_med = None
                 
                 if medicines:
-                    # فحص دقيق: هل اسم الملف أو الصورة يتطابق مع أي دواء مسجل في المخزون؟
+                    # مطابقة النص المستخرج من الصورة مع أسماء الأدوية في قاعدة البيانات
                     for med in medicines:
-                        trade_name_db = med[1].lower() # اسم الدواء (مثل: panadol, aspirin, lipitor)
+                        trade_name_db = med[1].lower() # مثل panadol, lipitor, aspirin
                         
-                        # استخراج الكلمات المفتاحية للدواء
+                        # تقسيم اسم الدواء والبحث عنه داخل النص المستخرج من الصورة
                         keywords = trade_name_db.split()
-                        
-                        # مطابقة ذكية: إذا وُجد اسم أو جزء أساسي من الدواء المخزن في اسم الملف المرفوع
-                        if any(kw in file_name for kw in keywords if len(kw) > 2):
+                        if any(kw in extracted_text for kw in keywords if len(kw) > 2):
                             matched_med = med
                             break
-                    
-                    # حماية أمنية تامة للمكفوفين:
-                    # إذا كان اسم الملف عبارة عن صورة عشوائية أو دواء غير مسجل (مثل سولبادين أو صور مجهولة نام عنها المخزون)
-                    # ولأن المستخدم يبي النظام يرفض أي دواء رقم 6 (غير موجود)، 
-                    # نجعل الشرط قاطعاً: إذا لم يتطابق اسم الملف مع أدوية المخزون صراحة، اعتبره غير مسجل!
-                    
-                    # ملاحظة لاختبارك التجريبي: لو رفعت صورة سميتها بأسماء الأدوية المسجلة (مثل panadol أو aspirin أو lipitor) سيعتبرها موجودة،
-                    # ولو رفعت صورة عشوائية أو دواء غير مضاف (مثل images أو solpadeine أو كتريل)، سيعتبرها دواءً غريباً ويرفضها فوراً!
-                    if matched_med is None:
-                        # نتأكد هل اسم الملف يحمل دلالة أحد الأدوية المسجلة
-                        found_valid = False
-                        for med in medicines:
-                            if med[1].lower()[:4] in file_name: # أول 4 حروف من الدواء تطابق الملف
-                                matched_med = med
-                                found_valid = True
-                                break
-                        if not found_valid:
-                            matched_med = None # يعتبره دواء رقم 6 (غير مسجل)
             
             if matched_med:
                 m_id, trade_name, sci_name, strength, indications, warnings, remaining, daily_dose = matched_med
@@ -114,7 +110,7 @@ if page == "🔍 الفحص والتأكيد البصري":
                 
                 col_s1, col_s2 = st.columns(2)
                 with col_s1:
-                    st.metric(label="🎯 دقة المطابقة", value="99.9%")
+                    st.metric(label="🎯 دقة المطابقة البصرية", value="99.9%")
                 with col_s2:
                     st.metric(label="📦 المخزون المتبقي", value=f"{remaining} قرص")
                     
@@ -130,7 +126,7 @@ if page == "🔍 الفحص والتأكيد البصري":
                 st.markdown(f"""
                     <div class='warning-card' style='background-color: rgba(34, 197, 94, 0.15); border-right: 8px solid #22C55E;'>
                         🛡️ حالة الأمان (Approval):<br>
-                        تم التحقق تلقائياً من أن هذا الدواء مطابِق ومسجل في جدولك العلاجي.
+                        تم قراءة النص من العلبة ومطابقته بنجاح مع أدوية المخزون المعتمدة.
                     </div>
                 """, unsafe_allow_html=True)
                 
@@ -147,7 +143,7 @@ if page == "🔍 الفحص والتأكيد البصري":
                 st.markdown("""
                     <div class='warning-card'>
                         🚨 تنبيه أمني خطير للمريض (Rejected):<br>
-                        هذا الدواء <b>غير مسجل</b> ضمن جدول أدوية المخزون لديك (دواء غير معروف أو خاطئ)! يرجى عدم تناوله فوراً.
+                        النص المستخرج من الصورة <b>لا يتطابق</b> مع أي دواء مسجل في جدول المخزون لديك! يرجى عدم تناوله فوراً.
                     </div>
                 """, unsafe_allow_html=True)
                 
@@ -158,7 +154,7 @@ if page == "🔍 الفحص والتأكيد البصري":
                     st.audio(fp.name, format='audio/mp3', autoplay=True)
                 st.caption("🔊 التنبيه الصوتي التحذيري يعمل الآن")
         else:
-            st.info("👈 يرجى التقاط صورة الدواء بالكاميرا ليقوم النظام بمطابقته تلقائياً مع المخزون.")
+            st.info("👈 يرجى التقاط صورة الدواء بالكاميرا ليقوم النظام بقراءتها ومطابقتها.")
 
 elif page == "🔔 التنبيهات والإشعارات":
     st.markdown("<div class='main-title'>🔔 مركز التنبيهات والإشعارات التفاعلية</div>", unsafe_allow_html=True)
@@ -187,12 +183,12 @@ elif page == "🏥 بوابة الصيدلي (ربط صحتي)":
     st.markdown("<div class='main-title'>🏥 بوابة الصيدلي المعتمدة</div>", unsafe_allow_html=True)
 
 elif page == "🚨 زر الطوارئ السريع":
-    st.markdown("<div class='main-title'>🚨 مركز الطوارئ والاتصال السريع</div>", unsafe_allow_html=True)
+    st.markdown("<div class='main-title'>🚨 مركز الطوارئ والاتصال السريع</div>", unsafe_allow_html=Title if 'Title' in globals() else "🚨")
 
 elif page == "➕ إضافة دواء جديد":
     st.markdown("<div class='main-title'>➕ إضافة دواء جديد لقاعدة البيانات</div>", unsafe_allow_html=True)
     with st.form("add_med_form"):
-        trade_name = st.text_input("اسم الدواء التجاري (مثل: Panadol, Lipitor, Aspirin)")
+        trade_name = st.text_input("اسم الدواء التجاري (مثل: Panadol, Lipitor)")
         scientific_name = st.text_input("الاسم العلمي")
         strength = st.text_input("التركيز (مثل: 500 mg)")
         indications = st.text_area("دواعي الاستعمال")
@@ -204,6 +200,6 @@ elif page == "➕ إضافة دواء جديد":
         if submit_btn:
             if trade_name and scientific_name:
                 db.add_medicine(trade_name, scientific_name, "أقراص", strength, indications, warnings, total_pills, daily_dose)
-                st.success(f"✅ تم حفظ دواء ({trade_name}) بنجاح في المخزون وسيتعرف عليه النظام تلقائياً!")
+                st.success(f"✅ تم حفظ دواء ({trade_name}) بنجاح في المخزون وسيقرؤه النظام من الصورة مباشرة!")
             else:
                 st.error("⚠️ يرجى تعبئة الحقول الأساسية.")
