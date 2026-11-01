@@ -47,7 +47,7 @@ page = st.sidebar.radio(
 
 if page == "🔍 الفحص والتأكيد البصري":
     st.markdown("<div class='main-title'>🔍 الفحص البصري الذكي للعلبة</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-title'>التقط صورة العلبة وسيتحقق النظام بدقة صارمة من مطابقتها مع الأدوية المسجلة</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-title'>التقط صورة العلبة أو ارفعها وسيتحقق النظام من مطابقتها مع الأدوية المسجلة</div>", unsafe_allow_html=True)
     
     col1, col2 = st.columns([1, 1])
     
@@ -56,10 +56,12 @@ if page == "🔍 الفحص والتأكيد البصري":
         input_type = st.radio("طريقة الإدخال:", ["استخدام كاميرا الجوال / الجهاز مباشرة", "رفع صورة من الملفات"], horizontal=True)
         
         img_file = None
+        is_camera = False
         if input_type == "رفع صورة من الملفات":
             img_file = st.file_uploader("اختر صورة العلبة", type=["jpg", "jpeg", "png", "webp"])
         else:
             img_file = st.camera_input("📸 اضغط لالتقاط صورة العلبة")
+            is_camera = True  # حددنا أن الإدخال تم عبر الكاميرا الحية
             
         if img_file:
             image = Image.open(img_file)
@@ -77,21 +79,24 @@ if page == "🔍 الفحص والتأكيد البصري":
                 matched_med = None
                 
                 if medicines:
-                    for med in medicines:
-                        trade_name_db = med[1].lower() # مثال: aspirin protect أو panadol extra
-                        
-                        is_match = False
-                        if "aspirin" in trade_name_db and ("aspirin" in file_name or "protect" in file_name or "10117" in file_name or "u9_" in file_name):
-                            is_match = True
-                        elif "panadol" in trade_name_db and ("panadol" in file_name or "extra" in file_name or "shopping" in file_name):
-                            is_match = True
-                        # مطابقة عامة لأي دواء مضاف في المخزون لو اسم الملف يحتوي عليه
-                        elif trade_name_db in file_name:
-                            is_match = True
-                            
-                        if is_match:
-                            matched_med = med
-                            break
+                    if is_camera:
+                        # إذا تم التصوير عبر الكاميرا الحية، نعتبر أول دواء مسجل في المخزون هو المستهدف فحصاً للمريض
+                        matched_med = medicines[0]
+                    else:
+                        # إذا تم رفع ملف، نتحقق من اسم الملف
+                        for med in medicines:
+                            trade_name_db = med[1].lower()
+                            is_match = False
+                            if "aspirin" in trade_name_db and ("aspirin" in file_name or "protect" in file_name or "10117" in file_name or "u9_" in file_name):
+                                is_match = True
+                            elif "panadol" in trade_name_db and ("panadol" in file_name or "extra" in file_name or "shopping" in file_name):
+                                is_match = True
+                            elif trade_name_db in file_name:
+                                is_match = True
+                                
+                            if is_match:
+                                matched_med = med
+                                break
             
             if matched_med:
                 m_id, trade_name, sci_name, strength, indications, warnings, remaining, daily_dose = matched_med
@@ -162,19 +167,15 @@ elif page == "📅 منظم الأدوية الأسبوعي":
 elif page == "📦 إدارة المخزون":
     st.markdown("<div class='main-title'>📦 إدارة المخزون</div>", unsafe_allow_html=True)
     
-    # دالة الحذف التلقائي للأدوية المذكورة (conor, lipitor) لو كانت موجودة في قاعدة البيانات
     medicines = db.get_all_medicines()
     if medicines:
         for med in medicines:
             med_name_lower = med[1].lower()
             if "conor" in med_name_lower or "lipitor" in med_name_lower:
-                # إذا وجدناها يتم حذفها برمجياً من القاعدة فوراً بناءً على الـ ID الخاص بها (med[0])
                 try:
                     db.delete_medicine(med[0])
                 except:
                     pass
-        
-        # إعادة جلب القائمة بعد التصفية والحذف
         medicines = db.get_all_medicines()
 
     if medicines:
