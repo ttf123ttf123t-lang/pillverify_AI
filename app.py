@@ -107,8 +107,8 @@ if page == "🔍 الفحص والتأكيد البصري":
                 tts = gTTS(text=audio_text, lang='ar')
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as fp:
                     tts.save(fp.name)
-                    st.audio(fp.name, format='audio/mp3', autoplay=True)
-                st.caption("🔊 التوجيه الصوتي يعمل الآن لمساعدة المكفوفين")
+                    st.audio(fp.name, format='audio/mp3')
+                st.caption("🔊 اضغط على مشغل الصوت أدناه لسماع التوجيه الصوتي لمساعدة المكفوفين")
                 
             else:
                 st.markdown("<span class='status-badge-danger'>❌ تحذير: هذا ليس الدواء المسجل في مخزونك!</span>", unsafe_allow_html=True)
@@ -124,8 +124,8 @@ if page == "🔍 الفحص والتأكيد البصري":
                 tts = gTTS(text=audio_text, lang='ar')
                 with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as fp:
                     tts.save(fp.name)
-                    st.audio(fp.name, format='audio/mp3', autoplay=True)
-                st.caption("🔊 التنبيه الصوتي التحذيري يعمل الآن")
+                    st.audio(fp.name, format='audio/mp3')
+                st.caption("🔊 اضغط على مشغل الصوت أدناه لسماع التنبيه التحذيري")
         else:
             st.info("👈 يرجى التقاط صورة الدواء بالكاميرا أو رفعها للبدء بالتحقق.")
 
